@@ -23,6 +23,7 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
+    RestartStrategy = {one_for_one, 5, 10},
     Children = [?CHILD(proxy_client_worker_sup, supervisor),
                 ?CHILD(proxy_client_srv, worker)],
-    {ok, { {one_for_one, 5, 10}, Children} }.
+    {ok, {RestartStrategy, Children} }.

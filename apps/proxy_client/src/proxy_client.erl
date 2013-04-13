@@ -5,17 +5,18 @@
 %% Application callbacks
 -export([start/2, stop/1]).
 
--export([start/0]).
+-export([start/2]).
 
 %% ===================================================================
 %% Application callbacks
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
+    lager:start(),
+    application:start(ranch),
     proxy_client_sup:start_link().
 
 stop(_State) ->
+    lager:stop(),
     ok.
 
-start() ->
-    application:start(?MODULE).
