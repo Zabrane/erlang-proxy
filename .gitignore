@@ -4,3 +4,4 @@
 *.dump
 config.hrl
 deps/
+\#*\#

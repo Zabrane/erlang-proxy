@@ -55,7 +55,7 @@ parse_addr_type(?ADDR_DOMAIN,Payload)->
         true ->
             <<DomainLen:8, Other/binary>> = Payload,
             OtherSize = erlang:size(Other) - 2,
-            case Other >= DomainLen of
+            case OtherSize >= DomainLen of
                 true ->
                     <<DomainBin:DomainLen/binary, Port:16,Rest/bits>> = Other,
                     {ok,{connect, {domain, DomainBin, Port}},Rest};
