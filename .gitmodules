@@ -1,3 +1,6 @@
 [submodule "apps/proxy_client/src/utils"]
 	path = apps/proxy_client/src/utils
 	url = git@github.com:DavidAlphaFox/erlang-utils.git
+[submodule "apps/proxy_client/src/utils-extends"]
+	path = apps/proxy_client/src/utils-extends
+	url = git@github.com:DavidAlphaFox/erlang-utils-extends.git
