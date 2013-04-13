@@ -43,10 +43,10 @@ handle_info({tcp,Socket,Data},State = #state{socket = Socket,transport = Transpo
     end,
     {noreply,State#state{step = NewStep,buf = Rest}};
 handle_info({tcp_clsoed,Socket},State = #state{socket = Socket})->
-    {stop,normal};
+    {stop,normal,State};
 handle_info({tcp_error,Socket},State = #state{socket = Socket,transport = Transport})->
     Transport:close(Socket),
-    {stop,normal};
+    {stop,normal,State};
 handle_info(_Info, State) ->
     {noreply, State}.
 
