@@ -1,72 +1,90 @@
-%%%-------------------------------------------------------------------
-%%% @author Wang ShuYu <andelf@gmail.com>
-%%% @copyright (C) 2013, Wang ShuYu
-%%% @doc
-%%%
-%%% @end
-%%% Created : 10 Apr 2013 by Wang ShuYu <andelf@gmail.com>
-%%%-------------------------------------------------------------------
--module(proxy_proto_socks5).
+-module(protocol_socks5).
 
-%% API
--export([]).
 -compile([export_all]).
 
--define(IPV4, 16#01).
--define(IPV6, 16#04).
--define(DOMAIN, 16#03).
+-include("priv/socks5_define.hrl").
 
+parse_protocol(init,Buf) when erlang:size(Buf) =< 2->
+    {init,undefined,Buf};
+parse_protocol(init,<<16#05:8,NMethods:8,Payload/binary>>) when NMethods =< erlang:size(Payload)->
+    <<Methods:NMethods/binary,Rest/bits >> = Payload,
+    {request,{auth,Methods},Rest};
 
-%%%===================================================================
-%%% API
-%%%===================================================================
-parse_greeting_request(<<16#05:8, NumMethods:8, Methods:NumMethods/binary>>) ->
-    {auth_methods, Methods}.
+parse_protocol(request,Buf) when erlang:size(Buf) =< 4->
+    {request,undefined,Buf};
 
-unparse_greeting_response(Method) ->
-    MethodProp = [{no_auth, 16#00},
-                  {user_pass, 16#02}],
-    Code = proplists:get_value(Method, MethodProp),
-    <<16#05:8, Code:8>>.
-
-parse_auth_request(user_pass, _) ->
-    {error, not_implemented_yet}.
-
-parse_connection_request(<<16#05:8, CmdCode:8, 0:8, AddrType:8, Rest/binary>>) ->
+parse_protocol(request,<<16#05:8, CmdCode:8, 0:8, AddrType:8, Payload/binary>> = Buf)->
     case CmdCode of
-        %% CONNET
-        16#01 ->
-            case AddrType of
-                ?IPV4 ->
-                    <<Address:32, Port:16>> = Rest,
-                    {connect, {ipv4, Address, Port}};
-                ?IPV6 ->
-                    <<Address:128, Port:16>> = Rest,
-                    {connect, {ipv6, Address, Port}};
-                ?DOMAIN ->
-                    <<DomainLen:8, DomainBin:DomainLen/binary, Port:16>> = Rest,
-                    %<<?DOMAIN, Port:16, DomainLen:8, DomainBin/binary>>
-                    {connect, {domain, DomainBin, Port}}
+        ?CMD_CONNECT ->
+            case parse_addr_type(AddrType,Payload) of
+                {ok,Command,Rest}->
+                    {process,Command,Rest};
+                {error,_}->
+                    {request,undefined,Buf}
+             end;
+        ?CMD_BIND ->
+            {process,stop,Buf};
+        ?CMD_UDPASSOCIATE ->
+            {process,stop,Buf}
+    end;
+
+parse_protocol(Step,Buf)->
+    {Step,undefined,Buf}.
+
+parse_addr_type(?ADDR_IPV4,Payload)->
+    Size = erlang:size(Payload),
+    case Size >= 6 of
+        true ->
+            <<Address:32, Port:16,Rest/bits>> = Payload,
+            {ok,{connect,{ipv4,Address,Port}},Rest};
+        _ ->
+            {error,Payload}
+    end;
+parse_addr_type(?ADDR_IPV6,Payload) ->
+    Size = erlang:size(Payload),
+    case Size >= 18 of
+        true ->
+            <<Address:128, Port:16,Rest/bits>> = Payload,
+            {ok,{connect,{ipv4,Address,Port}},Rest};
+        _ ->
+            {error,Payload}
+    end;
+parse_addr_type(?ADDR_DOMAIN,Payload)->
+    Size = erlang:size(Payload),
+    case Size > 1 of
+        true ->
+            <<DomainLen:8, Other/binary>> = Payload,
+            OtherSize = erlang:size(Other) - 2,
+            case Other >= DomainLen of
+                true ->
+                    <<DomainBin:DomainLen/binary, Port:16,Rest/bits>> = Other,
+                    {ok,{connect, {domain, DomainBin, Port}},Rest};
+                _->
+                    {error,Payload}
             end;
-        %% BIND
-        16#02 ->
-            {error, not_implemented_yet};
-        %% UDP ASSOCIATE
-        16#03 ->
-            {error, not_implemented_yet}
+         _->
+            {error,Payload}
     end.
 
-unparse_connection_response({granted, {ipv4, IP, Port}}) ->
-    <<16#05:8, 16#00:8, 0:8, ?IPV4, IP/binary, Port:16>>;
-unparse_connection_response({granted, {ipv6, IP, Port}}) ->
-    <<16#05:8, 16#00:8, 0:8, ?IPV6, IP/binary, Port:16>>;
-unparse_connection_response({granted, {domain, DomainBin, Port}}) ->
-    <<16#05:8, 16#00:8, 0:8, ?DOMAIN, (byte_size(DomainBin)):8, DomainBin/binary, Port:16>>;
-unparse_connection_response({rejected, _}) ->
-    <<16#05:8, 16#03:8, 0:8>>.
-
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+build_protocol(auth,AuthType)->
+    Code = case AuthType of 
+              undefined -> 
+                   proplists:get_value(default,?AUTHMAP);
+               _ ->
+                   proplists:get_value(AuthType,?AUTHMAP)
+           end,
+    case Code of
+        udefined ->
+            DefaultCode = proplists:get_value(default,?AUTHMAP),
+            <<16#05:8,DefaultCode>>;
+        _ ->
+            <<16#05:8,Code>>
+    end;
+build_protocol(process,{granted, {ipv4, IP, Port}}) ->
+    <<16#05:8, 16#00:8, 0:8, ?ADDR_IPV4, IP/binary, Port:16>>;
+build_protocol(process,{granted, {ipv6, IP, Port}}) ->
+    <<16#05:8, 16#00:8, 0:8, ?ADDR_IPV6, IP/binary, Port:16>>;
+build_protocol(process,{granted, {domain, DomainBin, Port}}) ->
+    <<16#05:8, 16#00:8, 0:8, ?ADDR_DOMAIN, (byte_size(DomainBin)):8, DomainBin/binary, Port:16>>;
+build_protocol(process,{rejected,_}) ->
+    <<16#05:8, 16#02:8, 0:8>>.
