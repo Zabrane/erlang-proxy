@@ -45,7 +45,7 @@ parse_addr_type(?ADDR_IPV6,Payload) ->
     case Size >= 18 of
         true ->
             <<Address:128, Port:16,Rest/bits>> = Payload,
-            {ok,{connect,{ipv4,Address,Port}},Rest};
+            {ok,{connect,{ipv6,Address,Port}},Rest};
         _ ->
             {error,Payload}
     end;
