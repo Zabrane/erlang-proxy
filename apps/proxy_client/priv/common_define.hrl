@@ -1,5 +1,6 @@
 -record(data,{
-          type,
+          operation,
+          address_type,
           address,
           port
          }).
